@@ -1,0 +1,385 @@
+import pygame as pyg
+import mysql.connector 
+from sys import exit
+import random
+import time
+pyg.init()
+init_time=pyg.time.get_ticks()
+pyg.display.set_caption("Quiz")
+#Constants:
+screen_Dimensions=(1080,720)
+Screen=pyg.display.set_mode(screen_Dimensions)
+bg_color='#0268d2'
+Font_Title=pyg.font.Font("Assets/myfont.ttf",70)
+Font_Title_Small=pyg.font.Font("Assets/myfont.ttf",45)
+Font_Question=pyg.font.Font("Assets/myfont.ttf",35)
+Font_Answer=pyg.font.Font("Assets/myfont.ttf",30)
+font_very_small=pyg.font.Font("Assets/myfont.ttf",20)
+Quiz_name=Font_Title.render("Online Quiz",True,'Gold')
+background = pyg.image.load('Assets/start_wall.jpeg')
+low_time_mp3=pyg.mixer.Sound("Assets/clock.mp3")
+click_mp3=pyg.mixer.Sound("Assets/click.wav")
+correct_mp3=pyg.mixer.Sound("Assets/mixkit-correct-answer-fast-notification-953.wav")
+wrong_mp3=pyg.mixer.Sound("Assets/mixkit-failure-arcade-alert-notification-240.wav")
+clock=pyg.time.Clock()
+G_I_text=Font_Title.render("General Instructions",True,"Gold")
+#-----  MYDB stuff  --------
+mydb= mysql.connector.connect(host="localhost",user="root",passwd="1234",database="online_quiz_question_answer")
+mycursor=mydb.cursor()
+mycursor.execute("Select * from info")
+rows_Question=mycursor.fetchall()
+rows_copy=rows_Question[:]
+#----- End ------
+Clock=pyg.time.Clock()
+#Variables:
+Game_run=True
+start=True
+Sound_on=True
+play_sound=True
+low_time_warning_given=False
+show_general_instructions=True
+difficulty='Easy'
+attempt=0
+attempt_counted=False
+Score=0
+question_no=1
+ans_given=False
+current_random_question_no=random.randint(0,len(rows_copy)-1)
+question_limit=21
+low_time=5
+Time_limit=15
+end=False
+question_start_time=0
+time_taken=False
+#Functions:
+def Draw_Screen():
+    new_screen=pyg.display.set_mode(screen_Dimensions)
+    new_screen.fill(bg_color)
+    return new_screen
+def Draw_button(rendered_text,but_x,but_y):
+    text_rect=rendered_text.get_rect(center=(but_x,but_y))
+    Screen.blit(rendered_text,text_rect)
+    return {'rect':text_rect,'text':rendered_text}
+def Is_clicked(button_rect,mouse_pos):
+    if button_rect["rect"].collidepoint(mouse_pos) and event.type==pyg.MOUSEBUTTONDOWN:
+        return True
+    else:
+        return False
+def Is_hovered(button_rect,mouse_pos):
+    if button_rect['rect'].collidepoint(mouse_pos):
+        return True
+    else:
+        return False
+def definetley_hovering(button_rect,mouse_pos,x,y):
+
+    if button_rect['rect'].collidepoint(mouse_pos):
+        text=button_rect['text']
+        text_rendered=Font_Answer.render(text,True,"Turquoise")
+        text_rect=text_rendered.get_rect(center=(x,y))
+        Screen.blit(text_rendered,text_rect)
+    pyg.display.update()
+def start_screen():
+
+    global start_rect
+    global options_rect
+    global quit_rect
+    global show_general_instructionTrue
+    Screen.blit(background,(0,0))
+    Draw_button(Quiz_name,540,100)
+    start_rect=Draw_button(Font_Title_Small.render("START",True,'White'),540,300)
+    options_rect=Draw_button(Font_Title_Small.render("OPTIONS",True,'White'),540,400)
+    quit_rect=Draw_button(Font_Title_Small.render("QUIT",True,'White'),540,500)
+    if  Is_hovered(start_rect,mouse_pos):
+        Draw_button(Font_Title_Small.render("START",True,'Turquoise'),540,300)
+    elif Is_hovered(options_rect,mouse_pos):
+        Draw_button(Font_Title_Small.render("OPTIONS",True,'Turquoise'),540,400)
+    elif Is_hovered(quit_rect,mouse_pos):
+        Draw_button(Font_Title_Small.render("QUIT",True,'Turquoise'),540,500)
+    if Is_clicked(quit_rect,mouse_pos):
+        exit()
+def options_screen():
+    global start,Time_limit,question_limit,low_time
+    global play_sound
+    global Sound_on
+    global difficulty
+    Option_loop_bool=True
+    while Option_loop_bool==True:
+        sound_label = "Sound: ON" if Sound_on else "Sound: OFF"
+        events=pyg.event.get()  
+        mouse_pos=pyg.mouse.get_pos()
+        Screen.fill(bg_color)
+        mouse_pos = pyg.mouse.get_pos()
+        Draw_button(Font_Title.render("OPTIONS",True,'Gold'),540,100)
+        Sound_rect=Draw_button(Font_Title_Small.render(sound_label,True, 'White'),540, 350)       
+        back_rect= Draw_button(Font_Title_Small.render("Back", True,'White'),540,560)
+        if Is_hovered(back_rect,mouse_pos):
+            back_rect= Draw_button(Font_Title_Small.render("Back", True,'Turquoise'),540,560)
+        if Is_hovered(Sound_rect,mouse_pos):
+            Sound_rect=Draw_button(Font_Title_Small.render(sound_label, True, 'Turquoise'), 540, 350)  
+        if difficulty=="Easy":
+                 difficulty_rect=Draw_button(Font_Title_Small.render("Difficulty: Easy", True, 'White'),540, 460)
+        elif difficulty=="Medium":
+             difficulty_rect=Draw_button(Font_Title_Small.render("Difficulty: Medium", True, 'White'),540, 460)
+        else:
+             difficulty_rect=Draw_button(Font_Title_Small.render("Difficulty: Hard", True, 'White'),540, 460)  
+        if difficulty_rect['rect'].collidepoint(mouse_pos):
+            difficulty_rect=Draw_button(Font_Title_Small.render(f"Difficulty: {difficulty}", True, 'Turquoise'),540, 460)
+        for event in events:
+         if event.type==pyg.QUIT:
+             exit()  
+         if back_rect["rect"].collidepoint(mouse_pos) and event.type==pyg.MOUSEBUTTONDOWN:
+            start=True
+            Option_loop_bool=False
+            break 
+         if Sound_rect['rect'].collidepoint(mouse_pos) and event.type==pyg.MOUSEBUTTONDOWN:
+             Sound_rect=Draw_button(Font_Title_Small.render(sound_label,True, 'White'),540, 350)
+             Sound_on=not Sound_on
+             play_sound=Sound_on
+
+         if difficulty_rect['rect'].collidepoint(mouse_pos) and event.type==pyg.MOUSEBUTTONDOWN and difficulty=="Easy":
+              difficulty="Medium"
+              Time_limit=10
+              question_limit=26
+              low_time=4.5
+         elif difficulty_rect['rect'].collidepoint(mouse_pos) and event.type==pyg.MOUSEBUTTONDOWN and difficulty=="Medium":
+              difficulty="Hard"
+              Time_limit=5
+              question_limit=31
+              low_time=3.3  
+         elif difficulty_rect['rect'].collidepoint(mouse_pos) and event.type==pyg.MOUSEBUTTONDOWN and difficulty=="Hard":
+              difficulty="Easy"     
+              Time_limit=15
+              question_limit=21
+              low_time=5.5                      
+        pyg.display.update()
+def General_instructions():
+     global mouse_pos,events,show_general_instructions
+     Screen.fill(bg_color)
+     rect_GI=Draw_button(G_I_text,540,100)
+     rule1=Font_Title_Small.render("i) +10 points for each correct answer ",True,"#F5F2D5")
+     rule2=Font_Title_Small.render("ii) -5 points for each wrong answer ",True,"#F5F2D5")
+     rule3=Font_Title_Small.render("iii) Answer within the given time limit  ",True,"#F5F2D5")
+     Draw_button(rule1,405,250)
+     Draw_button(rule2,385,350)
+     Draw_button(rule3,415,450)
+
+     continue_rect= Draw_button(Font_Title_Small.render("Continue", True,'#F5F2D5'),540,600)
+     if Is_hovered(continue_rect,mouse_pos):
+           continue_rect= Draw_button(Font_Title_Small.render("Continue", True,'Turquoise'),540,600)
+     for event in events:           
+      if continue_rect["rect"].collidepoint(mouse_pos) and event.type==pyg.MOUSEBUTTONDOWN:
+          show_general_instructions=False                              
+def show_score():
+     global Score
+     score=f"Score:{Score}"
+     score_rendered=Font_Answer.render(score,True,"White")
+     Draw_button(score_rendered,70,200)
+def show_question():#If error run:Update mysql.connector using pip install --upgrade mysql-connector-python
+
+   global ans_given,Score,current_random_question_no,question_no,start,rows_copy,end,question_start_time,time_taken,mouse_pos,low_time_warning_given
+   Screen.fill(bg_color)
+   if question_no==1 and time_taken==False:
+       question_start_time=pyg.time.get_ticks()//1000   
+       time_taken=True   
+   if question_no<question_limit:
+    if ans_given==True:
+     current_random_question_no=random.randint(0,len(rows_copy)-1)
+     low_time_warning_given=False
+     question_start_time=pyg.time.get_ticks()//1000
+     ans_given=False 
+    question=rows_copy[current_random_question_no][2]#indexing -1 
+    rendered_question=Font_Question.render(f"Q{question_no}) {question}",True,"White")     
+    Draw_button(rendered_question,540,50)
+    ans_1_A_RECT=Draw_button(Font_Answer.render(rows_copy[current_random_question_no][3],True,'White'),200,400)
+    ans_2_B_RECT=Draw_button(Font_Answer.render(rows_copy[current_random_question_no][4],True,'White'),800,400)
+    ans_3_C_RECT=Draw_button(Font_Answer.render(rows_copy[current_random_question_no][5],True,'White'),200,600)
+    ans_4_D_RECT=Draw_button(Font_Answer.render(rows_copy[current_random_question_no][6],True,'White'),800,600)
+    if ans_given==False:
+        if Is_hovered(ans_1_A_RECT,mouse_pos):
+            ans_1_A_RECT=Draw_button(Font_Answer.render(rows_copy[current_random_question_no][3],True,'Turquoise'),200,400)
+        if Is_hovered(ans_2_B_RECT,mouse_pos):
+            ans_2_B_RECT=Draw_button(Font_Answer.render(rows_copy[current_random_question_no][4],True,'Turquoise'),800,400)
+        if Is_hovered(ans_3_C_RECT,mouse_pos):
+            ans_3_C_RECT=Draw_button(Font_Answer.render(rows_copy[current_random_question_no][5],True,'Turquoise'),200,600)
+        if Is_hovered(ans_4_D_RECT,mouse_pos):
+            ans_4_D_RECT=Draw_button(Font_Answer.render(rows_copy[current_random_question_no][6],True,'Turquoise'),800,600)
+    Current_Time=pyg.time.get_ticks()//1000
+    Elapsed_Time=Current_Time-question_start_time
+    Show_Time=Time_limit-Elapsed_Time
+    time_text=Font_Answer.render(f"Time: {Show_Time}",True,"White")    
+    correct_ans=rows_copy[current_random_question_no][-1]
+    if Show_Time<low_time:
+       if play_sound==True:
+        if low_time_warning_given==False:
+         low_time_mp3.play()
+         low_time_warning_given=True
+    if correct_ans=="A":
+         correct_ans_rect=ans_1_A_RECT
+    if correct_ans=="B":
+         correct_ans_rect=ans_2_B_RECT
+    if correct_ans=="C":
+         correct_ans_rect=ans_3_C_RECT
+    if correct_ans=="D":
+         correct_ans_rect=ans_4_D_RECT
+    for event in events:
+        mouse_pos = pyg.mouse.get_pos()
+        if event.type == pyg.MOUSEBUTTONDOWN:
+            if Is_clicked(ans_1_A_RECT, mouse_pos) or Is_clicked(ans_2_B_RECT, mouse_pos) or \
+                    Is_clicked(ans_3_C_RECT, mouse_pos) or Is_clicked(ans_4_D_RECT, mouse_pos):
+                if correct_ans=="A":
+                    Draw_button(Font_Answer.render(rows_copy[current_random_question_no][3],True,'Green'),200,400)
+                    Draw_button(Font_Answer.render(rows_copy[current_random_question_no][4],True,'Red'),800,400)
+                    Draw_button(Font_Answer.render(rows_copy[current_random_question_no][5],True,'Red'),200,600)
+                    Draw_button(Font_Answer.render(rows_copy[current_random_question_no][6],False,'Red'),800,600)
+                    show_score()
+                    Draw_button(time_text,80,250)
+                if correct_ans=="B":
+                    Draw_button(Font_Answer.render(rows_copy[current_random_question_no][3],True,'Red'),200,400)
+                    Draw_button(Font_Answer.render(rows_copy[current_random_question_no][4],True,'Green'),800,400)
+                    Draw_button(Font_Answer.render(rows_copy[current_random_question_no][5],True,'Red'),200,600)
+                    Draw_button(Font_Answer.render(rows_copy[current_random_question_no][6],True,'Red'),800,600)
+                    show_score()
+                    Draw_button(time_text,80,250)
+                if correct_ans=="C":
+                    Draw_button(Font_Answer.render(rows_copy[current_random_question_no][3],True,'Red'),200,400)
+                    Draw_button(Font_Answer.render(rows_copy[current_random_question_no][4],True,'Red'),800,400)
+                    Draw_button(Font_Answer.render(rows_copy[current_random_question_no][5],True,'Green'),200,600)
+                    Draw_button(Font_Answer.render(rows_copy[current_random_question_no][6],True,'Red'),800,600)
+                    Draw_button(time_text,80,250)
+                    show_score()
+                if correct_ans=="D":
+                    Draw_button(Font_Answer.render(rows_copy[current_random_question_no][3],True,'Red'),200,400)
+                    Draw_button(Font_Answer.render(rows_copy[current_random_question_no][4],True,'Red'),800,400)
+                    Draw_button(Font_Answer.render(rows_copy[current_random_question_no][5],True,'Red'),200,600)
+                    Draw_button(Font_Answer.render(rows_copy[current_random_question_no][6],True,'Green'),800,600)
+                    Draw_button(time_text,80,250)
+                    show_score()
+                pyg.display.update()
+                
+                
+                
+                if Is_clicked(correct_ans_rect, mouse_pos) and ans_given==False:
+                    if play_sound==True:
+                     correct_mp3.play()
+                    Score += 10
+                    time.sleep(0.75)
+                    
+                    ans_given=True                    
+                
+                else:
+                    if play_sound==True:
+                     wrong_mp3.play()
+                    
+                    Score-=5
+                    time.sleep(0.75)
+                    
+                rows_copy.pop(current_random_question_no)
+                ans_given=True
+                question_no+=1
+                break
+                
+    
+    Draw_button(time_text,80,250)
+    if Show_Time==0:
+        ans_given=True
+        Score-=5
+        if correct_ans=="A":
+                    Draw_button(Font_Answer.render(rows_copy[current_random_question_no][3],True,'Green'),200,400)
+                    Draw_button(Font_Answer.render(rows_copy[current_random_question_no][4],True,'Red'),800,400)
+                    Draw_button(Font_Answer.render(rows_copy[current_random_question_no][5],True,'Red'),200,600)
+                    Draw_button(Font_Answer.render(rows_copy[current_random_question_no][6],True,'Red'),800,600)
+                    show_score()
+                    Draw_button(time_text,80,250)
+        if correct_ans=="B":
+                    Draw_button(Font_Answer.render(rows_copy[current_random_question_no][3],True,'Red'),200,400)
+                    Draw_button(Font_Answer.render(rows_copy[current_random_question_no][4],True,'Green'),800,400)
+                    Draw_button(Font_Answer.render(rows_copy[current_random_question_no][5],True,'Red'),200,600)
+                    Draw_button(Font_Answer.render(rows_copy[current_random_question_no][6],True,'Red'),800,600)
+                    show_score()
+                    Draw_button(time_text,80,250)
+        if correct_ans=="C":
+                    Draw_button(Font_Answer.render(rows_copy[current_random_question_no][3],True,'Red'),200,400)
+                    Draw_button(Font_Answer.render(rows_copy[current_random_question_no][4],True,'Red'),800,400)
+                    Draw_button(Font_Answer.render(rows_copy[current_random_question_no][5],True,'Green'),200,600)
+                    Draw_button(Font_Answer.render(rows_copy[current_random_question_no][6],True,'Red'),800,600)
+                    Draw_button(time_text,80,250)
+                    show_score()
+        if correct_ans=="D":
+                    Draw_button(Font_Answer.render(rows_copy[current_random_question_no][3],True,'Red'),200,400)
+                    Draw_button(Font_Answer.render(rows_copy[current_random_question_no][4],True,'Red'),800,400)
+                    Draw_button(Font_Answer.render(rows_copy[current_random_question_no][5],True,'Red'),200,600)
+                    Draw_button(Font_Answer.render(rows_copy[current_random_question_no][6],True,'Green'),800,600)
+                    Draw_button(time_text,80,250)
+                    show_score()
+        pyg.display.update()             
+        time.sleep(0.75)
+   else:
+       end=True
+def End_Screen():
+    global start,end,Score,question_no,rows_copy,show_general_instructions,mouse_pos,attempt,attempt_counted
+    Screen.fill("#734F96")
+    if attempt_counted==False:
+        attempt+=1
+        attempt_counted=True
+        attempt_str=f"Attempt: {attempt}"
+        sql_command = f"INSERT INTO score (name, score) VALUES ('{attempt_str}', {Score})"
+        mycursor.execute(sql_command)
+        mydb.commit()
+    Font_quiz_over=pyg.font.Font("Assets/myfont.ttf",85)
+    Font_score=pyg.font.Font("Assets/myfont.ttf",52)
+    Font_highest=pyg.font.Font("Assets/myfont.ttf",42)
+    Font_retry_quit=pyg.font.Font("Assets/myfont.ttf",40)
+    quiz_over_rendered=Font_quiz_over.render("QUIZ OVER! ",True,"#FAFA7E")
+    Draw_button(quiz_over_rendered,564,120)      
+    score_rendered_end=Font_score.render(f"Score: {Score}",True,"#FAFA7E")
+    Draw_button(score_rendered_end,540,260)
+    Retry_rect= Draw_button(Font_retry_quit.render("Retry?",True,'#FAFA7E'),840,560)
+    mycursor.execute("select max(score) from score")
+    result=mycursor.fetchall()
+    for data in result:
+        for i in data:#from tuple to number result=(140),i=140 looks better
+         highest_score=i
+    high_score_rendered=Font_highest.render(f"Highest Score: {highest_score}",True,"#FAFA7E")
+    Draw_button(high_score_rendered,540,460)
+    if Is_hovered(Retry_rect,mouse_pos):
+        Retry_rect=Draw_button(Font_retry_quit.render("Retry?",True,'Turquoise'),840,560)
+    quit_rect=Draw_button(Font_retry_quit.render("Quit",True,"#FAFA7E"),200,560)
+    if Is_clicked(quit_rect,mouse_pos):
+        exit()
+    if Is_hovered(quit_rect,mouse_pos):
+        quit_rect=Draw_button(Font_retry_quit.render("Quit",True,'Turquoise'),200,560)
+   
+    for event in events:
+        mouse_pos=pyg.mouse.get_pos()                             
+        if Retry_rect["rect"].collidepoint(mouse_pos) and event.type==pyg.MOUSEBUTTONDOWN:
+            start=True
+            question_no=1
+            Score=0 
+            rows_copy=rows_Question[:]
+            end=False
+            attempt_counted=False
+            show_general_instructions=True
+while Game_run:     #Game Loop
+    mouse_pos=pyg.mouse.get_pos()
+    events= pyg.event.get()
+    for event in events:
+        if event.type==pyg.QUIT:exit()
+        if event.type==pyg.MOUSEBUTTONDOWN and play_sound==True :click_mp3.play()
+        
+    if start:
+     start_screen()
+    if start==False and show_general_instructions==True:#General instructions
+            General_instructions()
+    if start==False and show_general_instructions==False:#General instructions                       
+            show_question()
+            show_score() 
+                    
+    if Is_clicked(start_rect,mouse_pos):#GAME START AFTER CLICKING START BUTTON
+        start=False
+    if Is_clicked(options_rect,mouse_pos) and start==True:#Options screen
+        start=False
+        options_screen()
+    if end==True:
+        End_Screen()
+    pyg.display.update()
+#Done!
